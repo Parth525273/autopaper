@@ -70,4 +70,4 @@ This project is under active development. See the roadmap above for what's comin
 
 ## License
 
-VIT
+MIT
