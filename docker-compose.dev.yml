@@ -1,0 +1,15 @@
+version: "3.9"
+
+# Development overrides — run with:
+# docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  frontend:
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+
+  backend:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - ENVIRONMENT=development
