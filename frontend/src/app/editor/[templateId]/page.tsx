@@ -9,6 +9,7 @@ import SectionList from "@/components/editor/SectionList";
 import SectionEditor from "@/components/editor/SectionEditor";
 import AuthorForm from "@/components/editor/AuthorForm";
 import KeywordsInput from "@/components/editor/KeywordsInput";
+import PaperPreview from "@/components/preview/PaperPreview";
 import { FileText, Eye, EyeOff, ChevronLeft, Save } from "lucide-react";
 
 interface EditorPageProps {
@@ -19,21 +20,18 @@ export default function EditorPage({ params }: EditorPageProps) {
   const { templateId } = use(params);
   const router = useRouter();
   const { paper, setTitle, setAuthors, setKeywords, setSectionContent } = usePaperStore();
-
   const [activeSection, setActiveSection] = useState("title");
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
   const [saved, setSaved] = useState(false);
 
   const template = TEMPLATE_MAP[templateId];
 
-  // Redirect if invalid template
   useEffect(() => {
     if (!template) router.push("/templates");
   }, [template, router]);
 
   if (!template) return null;
 
-  // Compute completed sections
   const completedSections: SectionKey[] = (Object.keys(paper.sections) as SectionKey[]).filter(
     (key) => paper.sections[key]?.trim().length > 0
   );
@@ -48,9 +46,7 @@ export default function EditorPage({ params }: EditorPageProps) {
       case "title":
         return (
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Paper Title
-            </label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Paper Title</label>
             <input
               type="text"
               value={paper.title}
@@ -58,43 +54,30 @@ export default function EditorPage({ params }: EditorPageProps) {
               placeholder="Enter your paper title..."
               className="w-full px-4 py-3 text-lg border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="mt-2 text-xs text-slate-400">
-              Use title case. Keep it concise and descriptive.
-            </p>
+            <p className="mt-2 text-xs text-slate-400">Use title case. Keep it concise and descriptive.</p>
           </div>
         );
-
       case "authors":
         return (
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Author Details
-            </label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Author Details</label>
             <AuthorForm authors={paper.authors} onChange={setAuthors} />
           </div>
         );
-
       case "keywords":
         return (
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Keywords
-            </label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Keywords</label>
             <KeywordsInput keywords={paper.keywords} onChange={setKeywords} />
-            <p className="mt-2 text-xs text-slate-400">
-              Add 5–10 relevant keywords. Press Enter or comma after each.
-            </p>
+            <p className="mt-2 text-xs text-slate-400">Add 5–10 relevant keywords. Press Enter or comma after each.</p>
           </div>
         );
-
       default:
         const section = SECTIONS.find((s) => s.key === activeSection);
         if (!section) return null;
         return (
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              {section.label}
-            </label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{section.label}</label>
             <SectionEditor
               content={paper.sections[activeSection as SectionKey]}
               placeholder={`Write your ${section.label.toLowerCase()} here...`}
@@ -106,7 +89,6 @@ export default function EditorPage({ params }: EditorPageProps) {
     }
   };
 
-  // Navigate to next section
   const allSectionKeys = ["title", "authors", "keywords", ...SECTIONS.map((s) => s.key)];
   const currentIndex = allSectionKeys.indexOf(activeSection);
   const nextSection = allSectionKeys[currentIndex + 1];
@@ -114,8 +96,7 @@ export default function EditorPage({ params }: EditorPageProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pt-14 flex flex-col">
-
-      {/* Editor top bar */}
+      {/* Top bar */}
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -135,7 +116,6 @@ export default function EditorPage({ params }: EditorPageProps) {
             </span>
           </div>
         </div>
-
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowPreview(!showPreview)}
@@ -151,20 +131,16 @@ export default function EditorPage({ params }: EditorPageProps) {
             <Save size={14} />
             {saved ? "Saved!" : "Save"}
           </button>
-          <button
-            onClick={() => router.push(`/editor/${templateId}/preview`)}
-            className="flex items-center gap-2 text-sm px-3 py-1.5 bg-slate-900 dark:bg-white hover:bg-slate-700 dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-lg transition-colors"
-          >
+          <button className="flex items-center gap-2 text-sm px-3 py-1.5 bg-slate-900 dark:bg-white hover:bg-slate-700 dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-lg transition-colors">
             <FileText size={14} />
             Generate
           </button>
         </div>
       </div>
 
-      {/* Main editor area */}
+      {/* Main area */}
       <div className="flex flex-1 overflow-hidden">
-
-        {/* Left sidebar — section list */}
+        {/* Left sidebar */}
         <div className="w-56 flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 overflow-y-auto p-3">
           <SectionList
             activeSection={activeSection}
@@ -173,16 +149,12 @@ export default function EditorPage({ params }: EditorPageProps) {
           />
         </div>
 
-        {/* Center — editor */}
-        <div className="flex-1 overflow-y-auto p-8">
+        {/* Center editor */}
+        <div className={`${showPreview ? "w-[40%]" : "flex-1"} overflow-y-auto p-8 transition-all`}>
           <div className="max-w-2xl mx-auto">
-
-            {/* Section content */}
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 mb-4">
               {renderActiveSection()}
             </div>
-
-            {/* Prev / Next navigation */}
             <div className="flex justify-between">
               <button
                 onClick={() => prevSection && setActiveSection(prevSection)}
@@ -199,19 +171,15 @@ export default function EditorPage({ params }: EditorPageProps) {
                 Next Section →
               </button>
             </div>
-
           </div>
         </div>
 
-        {/* Right — preview panel (Commit 7) */}
+        {/* Right preview */}
         {showPreview && (
-          <div className="w-[45%] flex-shrink-0 border-l border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 overflow-y-auto flex items-center justify-center">
-            <p className="text-sm text-slate-400">
-              Live preview coming in next step
-            </p>
+          <div className="flex-1 border-l border-slate-200 dark:border-slate-800 overflow-hidden">
+            <PaperPreview paper={paper} />
           </div>
         )}
-
       </div>
     </div>
   );
