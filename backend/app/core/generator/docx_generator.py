@@ -4,7 +4,7 @@ Generates properly formatted Word documents based on template configs.
 """
 
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt, Emu
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_SECTION
 from docx.oxml.ns import qn
@@ -15,24 +15,13 @@ from app.core.templates import get_template
 
 
 def strip_html(html: str) -> str:
-    """Remove HTML tags from TipTap content."""
     clean = re.sub(r"<[^>]+>", " ", html)
     clean = re.sub(r"\s+", " ", clean).strip()
     return clean
 
 
-def set_paragraph_font(paragraph, font_name: str, font_size: int, bold: bool = False, italic: bool = False, all_caps: bool = False):
-    """Apply font settings to all runs in a paragraph."""
-    for run in paragraph.runs:
-        run.font.name = font_name
-        run.font.size = Pt(font_size)
-        run.font.bold = bold
-        run.font.italic = italic
-        run.font.all_caps = all_caps
-
-
-def add_run_with_font(paragraph, text: str, font_name: str, font_size: int, bold=False, italic=False, all_caps=False):
-    """Add a run with specific font settings."""
+def add_run_with_font(paragraph, text: str, font_name: str, font_size: int,
+                      bold=False, italic=False, all_caps=False):
     run = paragraph.add_run(text)
     run.font.name = font_name
     run.font.size = Pt(font_size)
@@ -43,19 +32,75 @@ def add_run_with_font(paragraph, text: str, font_name: str, font_size: int, bold
 
 
 def set_two_columns(section):
-    """Set two-column layout for a section."""
     sectPr = section._sectPr
     cols = OxmlElement("w:cols")
     cols.set(qn("w:num"), "2")
-    cols.set(qn("w:space"), "360")  # ~0.25 inch gap
+    cols.set(qn("w:space"), "360")
     sectPr.append(cols)
 
 
+def add_ieee_authors_table(doc, authors: list, font_name: str):
+    """Add authors in IEEE 3-column grid format using a Word table."""
+    if not authors:
+        return
+
+    # Always split into rows of 3, pad last row with None
+    raw_rows = [authors[i:i+3] for i in range(0, len(authors), 3)]
+    rows = []
+    for row in raw_rows:
+        padded = row + [None] * (3 - len(row))
+        rows.append(padded)
+
+    for row_authors in rows:
+        num_cols = 3  # always 3 columns
+        table = doc.add_table(rows=1, cols=num_cols)
+        table.style = "Table Grid"
+
+        # Remove all borders
+        tbl = table._tbl
+        tblPr = tbl.find(qn("w:tblPr"))
+        if tblPr is None:
+            tblPr = OxmlElement("w:tblPr")
+            tbl.insert(0, tblPr)
+        tblBorders = OxmlElement("w:tblBorders")
+        for border_name in ["top", "left", "bottom", "right", "insideH", "insideV"]:
+            border = OxmlElement(f"w:{border_name}")
+            border.set(qn("w:val"), "none")
+            tblBorders.append(border)
+        tblPr.append(tblBorders)
+
+        for i, author in enumerate(row_authors):
+            cell = table.rows[0].cells[i]
+            cell.width = Inches(2.4)
+
+            # Clear default paragraph
+            cell.paragraphs[0]._element.getparent().remove(cell.paragraphs[0]._element)
+
+            # Empty padding cell — leave blank
+            if author is None:
+                cell.add_paragraph()
+                continue
+
+            def add_cell_para(text, bold=False, italic=False, size=10, _cell=cell):
+                p = _cell.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(2)
+                if text:
+                    add_run_with_font(p, text, font_name, size, bold=bold, italic=italic)
+
+            add_cell_para(author.get("name", ""), bold=False, size=11)
+            if author.get("department"):
+                add_cell_para(author["department"], italic=True, size=10)
+            if author.get("affiliation"):
+                add_cell_para(author["affiliation"], italic=True, size=10)
+            if author.get("email"):
+                add_cell_para(author["email"], size=10)
+
+        doc.add_paragraph()  # spacer after each row
+
+
 def generate_docx(paper_data: dict, output_path: str) -> str:
-    """
-    Generate a DOCX file from paper data using the selected template.
-    Returns the output file path.
-    """
     template_id = paper_data.get("templateId", "ieee-conference")
     template = get_template(template_id)
 
@@ -65,7 +110,7 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
     spacing = template["spacing"]
     numbering = template["numbering"]
 
-    # ── Page margins ─────────────────────────────────────────
+    # Page margins
     section = doc.sections[0]
     section.page_width = Inches(page_cfg["width_inches"])
     section.page_height = Inches(page_cfg["height_inches"])
@@ -75,19 +120,16 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
     section.right_margin = Inches(page_cfg["margin_right_inches"])
 
     title_font = fonts["title"]
-    author_font = fonts["authors"]
-    affil_font = fonts["affiliation"]
     body_font = fonts["body"]
     heading_font = fonts["section_heading"]
     abstract_heading_font = fonts["abstract_heading"]
     abstract_body_font = fonts["abstract_body"]
     keyword_font = fonts["keywords"]
-    ref_font = fonts["references"]
 
-    # ── Title ─────────────────────────────────────────────────
+    # Title
     title_para = doc.add_paragraph()
     title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title_para.paragraph_format.space_after = Pt(6)
+    title_para.paragraph_format.space_after = Pt(12)
     add_run_with_font(
         title_para,
         paper_data.get("title", "Untitled Paper"),
@@ -96,65 +138,64 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
         bold=title_font.get("bold", True),
     )
 
-    # ── Authors ───────────────────────────────────────────────
+    # Authors — IEEE 3-column grid
     authors = paper_data.get("authors", [])
-    author_names = ", ".join([a.get("name", "") for a in authors if a.get("name")])
-    if author_names:
-        author_para = doc.add_paragraph()
-        author_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        author_para.paragraph_format.space_after = Pt(2)
-        add_run_with_font(author_para, author_names, author_font["name"], author_font["size_pt"])
+    is_ieee = template_id in ["ieee-conference", "ieee-journal"]
 
-    # Affiliations
-    for author in authors:
-        parts = []
-        if author.get("department"):
-            parts.append(author["department"])
-        if author.get("affiliation"):
-            parts.append(author["affiliation"])
-        if author.get("email"):
-            parts.append(author["email"])
-        if parts:
-            affil_para = doc.add_paragraph()
-            affil_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            affil_para.paragraph_format.space_after = Pt(2)
-            add_run_with_font(
-                affil_para,
-                ", ".join(parts),
-                affil_font["name"],
-                affil_font.get("size_pt", 10),
-                italic=affil_font.get("italic", False),
-            )
+    if is_ieee and authors:
+        add_ieee_authors_table(doc, authors, fonts["authors"]["name"])
+    else:
+        # Single column author list for Springer/Elsevier/ACM
+        author_names = ", ".join([a.get("name", "") for a in authors if a.get("name")])
+        if author_names:
+            ap = doc.add_paragraph()
+            ap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            ap.paragraph_format.space_after = Pt(4)
+            add_run_with_font(ap, author_names, fonts["authors"]["name"], fonts["authors"]["size_pt"])
+        for author in authors:
+            parts = []
+            if author.get("department"): parts.append(author["department"])
+            if author.get("affiliation"): parts.append(author["affiliation"])
+            if parts:
+                affil_para = doc.add_paragraph()
+                affil_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                affil_para.paragraph_format.space_after = Pt(2)
+                add_run_with_font(affil_para, ", ".join(parts),
+                                  fonts["affiliation"]["name"],
+                                  fonts["affiliation"].get("size_pt", 10),
+                                  italic=fonts["affiliation"].get("italic", False))
+            if author.get("email"):
+                ep = doc.add_paragraph()
+                ep.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                ep.paragraph_format.space_after = Pt(2)
+                add_run_with_font(ep, author["email"], fonts["authors"]["name"], 10)
 
-    # ── Abstract ──────────────────────────────────────────────
+    # Abstract
     abstract_text = strip_html(paper_data.get("sections", {}).get("abstract", ""))
     if abstract_text:
-        doc.add_paragraph()  # spacer
         abs_para = doc.add_paragraph()
         abs_para.paragraph_format.space_after = Pt(4)
+        add_run_with_font(abs_para, "Abstract\u2014",
+                          abstract_heading_font["name"],
+                          abstract_heading_font.get("size_pt", 9),
+                          bold=abstract_heading_font.get("bold", True),
+                          italic=abstract_heading_font.get("italic", True))
+        add_run_with_font(abs_para, abstract_text,
+                          abstract_body_font["name"],
+                          abstract_body_font.get("size_pt", 9))
 
-        add_run_with_font(
-            abs_para, "Abstract—",
-            abstract_heading_font["name"],
-            abstract_heading_font.get("size_pt", 9),
-            bold=abstract_heading_font.get("bold", True),
-            italic=abstract_heading_font.get("italic", True),
-        )
-        add_run_with_font(
-            abs_para, abstract_text,
-            abstract_body_font["name"],
-            abstract_body_font.get("size_pt", 9),
-        )
-
-    # ── Keywords ──────────────────────────────────────────────
+    # Keywords
     keywords = paper_data.get("keywords", [])
     if keywords:
         kw_para = doc.add_paragraph()
         kw_para.paragraph_format.space_after = Pt(8)
-        add_run_with_font(kw_para, "Keywords—", keyword_font["name"], keyword_font.get("size_pt", 9), bold=True, italic=True)
-        add_run_with_font(kw_para, ", ".join(keywords), keyword_font["name"], keyword_font.get("size_pt", 9))
+        add_run_with_font(kw_para, "Keywords\u2014",
+                          keyword_font["name"], keyword_font.get("size_pt", 9),
+                          bold=True, italic=True)
+        add_run_with_font(kw_para, ", ".join(keywords),
+                          keyword_font["name"], keyword_font.get("size_pt", 9))
 
-    # ── Two-column section break ───────────────────────────────
+    # Two-column section break for IEEE/ACM
     if template["columns"] == 2:
         new_section = doc.add_section(WD_SECTION.CONTINUOUS)
         set_two_columns(new_section)
@@ -163,7 +204,7 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
         new_section.left_margin = Inches(page_cfg["margin_left_inches"])
         new_section.right_margin = Inches(page_cfg["margin_right_inches"])
 
-    # ── Body sections ─────────────────────────────────────────
+    # Body sections
     section_order = [
         ("introduction", "Introduction"),
         ("literatureReview", "Literature Review"),
@@ -185,9 +226,8 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
         if not content:
             continue
 
-        # Section heading
         if numbering["sections"]:
-            if template_id in ["ieee-conference", "ieee-journal"]:
+            if is_ieee:
                 label = f"{roman_numerals[section_count]}. {default_label.upper()}"
             else:
                 label = f"{section_count + 1}. {default_label}"
@@ -198,15 +238,11 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
         heading_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         heading_para.paragraph_format.space_before = Pt(spacing["section_space_before_pt"])
         heading_para.paragraph_format.space_after = Pt(4)
-        add_run_with_font(
-            heading_para, label,
-            heading_font["name"],
-            heading_font["size_pt"],
-            bold=heading_font.get("bold", True),
-            all_caps=heading_font.get("all_caps", False),
-        )
+        add_run_with_font(heading_para, label,
+                          heading_font["name"], heading_font["size_pt"],
+                          bold=heading_font.get("bold", True),
+                          all_caps=heading_font.get("all_caps", False))
 
-        # Body paragraph
         body_para = doc.add_paragraph()
         body_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         body_para.paragraph_format.space_after = Pt(spacing["paragraph_space_after_pt"])
@@ -214,7 +250,6 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
 
         section_count += 1
 
-    # ── Save ──────────────────────────────────────────────────
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True)
     doc.save(output_path)
     return output_path
