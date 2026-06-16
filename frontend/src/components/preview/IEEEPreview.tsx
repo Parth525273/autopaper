@@ -27,12 +27,11 @@ export default function IEEEPreview({ paper, variant = "conference" }: IEEEPrevi
     { key: "references", label: "References" },
   ];
 
-  // Always split into rows of 3, pad last row with nulls to maintain grid
+  // Always 3 columns per row, pad with null
   const authors = paper.authors;
   const rows: (typeof authors[0] | null)[][] = [];
   for (let i = 0; i < authors.length; i += 3) {
     const row = authors.slice(i, i + 3) as (typeof authors[0] | null)[];
-    // Pad to always have 3 columns
     while (row.length < 3) row.push(null);
     rows.push(row);
   }
@@ -63,6 +62,8 @@ export default function IEEEPreview({ paper, variant = "conference" }: IEEEPrevi
     );
   };
 
+  const isTwoColumn = template?.columns === 2;
+
   return (
     <div
       className="bg-white text-black mx-auto shadow-lg"
@@ -73,26 +74,21 @@ export default function IEEEPreview({ paper, variant = "conference" }: IEEEPrevi
         fontFamily: "Times New Roman, Times, serif",
         fontSize: "10pt",
         lineHeight: "1.2",
+        color: "#000",
         transform: "scale(0.6)",
         transformOrigin: "top center",
       }}
     >
-      {/* Title */}
-      <div style={{ textAlign: "center", marginBottom: "16px" }}>
-        <h1 style={{ fontSize: "24pt", fontWeight: "bold", lineHeight: "1.2", marginBottom: "16px" }}>
+      {/* ── FULL WIDTH: Title + Authors only ── */}
+      <div style={{ textAlign: "center", marginBottom: "14px" }}>
+        <h1 style={{ fontSize: "24pt", fontWeight: "bold", lineHeight: "1.2", marginBottom: "14px", color: "#000" }}>
           {paper.title || "Paper Title"}
         </h1>
 
-        {/* Authors — always 3 columns per row */}
         {rows.map((row, rowIdx) => (
           <div
             key={rowIdx}
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              justifyContent: "center",
-              marginBottom: "14px",
-            }}
+            style={{ display: "flex", flexDirection: "row", justifyContent: "center", marginBottom: "12px" }}
           >
             {row.map((author, colIdx) => (
               <AuthorCell key={colIdx} author={author} />
@@ -101,44 +97,74 @@ export default function IEEEPreview({ paper, variant = "conference" }: IEEEPrevi
         ))}
       </div>
 
-      {/* Abstract + Keywords */}
-      {paper.sections.abstract && (
-        <div style={{ marginBottom: "10px" }}>
-          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-            <span style={{ fontStyle: "italic", fontWeight: "bold", fontSize: "9pt" }}>Abstract—</span>
-            <span style={{ fontSize: "9pt", textAlign: "justify", flex: 1 }}>
-              {stripHtml(paper.sections.abstract)}
-            </span>
+      <hr style={{ borderTop: "1px solid black", margin: "8px 0 10px 0" }} />
+
+      {/* ── TWO COLUMNS: Abstract + Keywords + All sections ── */}
+      <div style={{
+        columnCount: isTwoColumn ? 2 : 1,
+        columnGap: "18pt",
+        columnFill: "auto",
+      }}>
+
+        {/* Abstract */}
+        {paper.sections.abstract && (
+          <div style={{ marginBottom: "8px", breakInside: "avoid" }}>
+            <p style={{
+              fontSize: "9pt",
+              textAlign: "justify",
+              fontWeight: "bold",
+              color: "#000",
+              lineHeight: "1.35",
+              margin: "0 0 6px 0",
+            }}>
+              <span style={{ fontStyle: "italic" }}>Abstract</span>
+              {"—"}
+              {" "}{stripHtml(paper.sections.abstract)}
+            </p>
           </div>
-          {paper.keywords.length > 0 && (
-            <div style={{ marginTop: "4px", fontSize: "9pt" }}>
-              <span style={{ fontStyle: "italic", fontWeight: "bold" }}>Keywords—</span>
-              <span> {paper.keywords.join(", ")}</span>
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
-      {/* Divider */}
-      <hr style={{ borderTop: "1px solid black", marginBottom: "10px" }} />
+        {/* Keywords */}
+        {paper.keywords.length > 0 && (
+          <div style={{ marginBottom: "10px", breakInside: "avoid" }}>
+            <p style={{
+              fontSize: "9pt",
+              fontWeight: "bold",
+              fontStyle: "italic",
+              color: "#000",
+              margin: "0",
+              lineHeight: "1.35",
+            }}>
+              {"Keywords—"}{" "}{paper.keywords.join(", ")}
+            </p>
+          </div>
+        )}
 
-      {/* Two-column body */}
-      <div style={{ columnCount: template?.columns === 2 ? 2 : 1, columnGap: "18pt" }}>
+        {/* Body sections */}
         {sections.map(({ key, label }) => {
           const content = paper.sections[key as keyof typeof paper.sections];
           if (!content) return null;
           return (
-            <div key={key} style={{ marginBottom: "10px", breakInside: "avoid" }}>
+            <div key={key} style={{ marginBottom: "10px" }}>
               <h2 style={{
                 fontSize: "10pt",
                 fontWeight: "bold",
                 textTransform: "uppercase",
                 textAlign: "center",
                 marginBottom: "4px",
+                color: "#000",
+                letterSpacing: "0.03em",
               }}>
                 {label}
               </h2>
-              <p style={{ textAlign: "justify", textIndent: "12pt", fontSize: "10pt" }}>
+              <p style={{
+                textAlign: "justify",
+                textIndent: "12pt",
+                fontSize: "10pt",
+                color: "#000",
+                lineHeight: "1.3",
+                margin: 0,
+              }}>
                 {stripHtml(content)}
               </p>
             </div>

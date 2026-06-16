@@ -4,7 +4,7 @@ Generates properly formatted Word documents based on template configs.
 """
 
 from docx import Document
-from docx.shared import Inches, Pt, Emu
+from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_SECTION
 from docx.oxml.ns import qn
@@ -39,44 +39,38 @@ def set_two_columns(section):
     sectPr.append(cols)
 
 
+def remove_table_borders(table):
+    tbl = table._tbl
+    tblPr = tbl.find(qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.insert(0, tblPr)
+    tblBorders = OxmlElement("w:tblBorders")
+    for border_name in ["top", "left", "bottom", "right", "insideH", "insideV"]:
+        border = OxmlElement(f"w:{border_name}")
+        border.set(qn("w:val"), "none")
+        tblBorders.append(border)
+    tblPr.append(tblBorders)
+
+
 def add_ieee_authors_table(doc, authors: list, font_name: str):
-    """Add authors in IEEE 3-column grid format using a Word table."""
+    """Add authors in IEEE 3-column grid format — always 3 cols per row."""
     if not authors:
         return
 
-    # Always split into rows of 3, pad last row with None
+    # Always 3 cols per row, pad with None
     raw_rows = [authors[i:i+3] for i in range(0, len(authors), 3)]
-    rows = []
-    for row in raw_rows:
-        padded = row + [None] * (3 - len(row))
-        rows.append(padded)
+    rows = [row + [None] * (3 - len(row)) for row in raw_rows]
 
     for row_authors in rows:
-        num_cols = 3  # always 3 columns
-        table = doc.add_table(rows=1, cols=num_cols)
-        table.style = "Table Grid"
-
-        # Remove all borders
-        tbl = table._tbl
-        tblPr = tbl.find(qn("w:tblPr"))
-        if tblPr is None:
-            tblPr = OxmlElement("w:tblPr")
-            tbl.insert(0, tblPr)
-        tblBorders = OxmlElement("w:tblBorders")
-        for border_name in ["top", "left", "bottom", "right", "insideH", "insideV"]:
-            border = OxmlElement(f"w:{border_name}")
-            border.set(qn("w:val"), "none")
-            tblBorders.append(border)
-        tblPr.append(tblBorders)
+        table = doc.add_table(rows=1, cols=3)
+        remove_table_borders(table)
 
         for i, author in enumerate(row_authors):
             cell = table.rows[0].cells[i]
             cell.width = Inches(2.4)
-
-            # Clear default paragraph
             cell.paragraphs[0]._element.getparent().remove(cell.paragraphs[0]._element)
 
-            # Empty padding cell — leave blank
             if author is None:
                 cell.add_paragraph()
                 continue
@@ -89,7 +83,7 @@ def add_ieee_authors_table(doc, authors: list, font_name: str):
                 if text:
                     add_run_with_font(p, text, font_name, size, bold=bold, italic=italic)
 
-            add_cell_para(author.get("name", ""), bold=False, size=11)
+            add_cell_para(author.get("name", ""), size=11)
             if author.get("department"):
                 add_cell_para(author["department"], italic=True, size=10)
             if author.get("affiliation"):
@@ -97,7 +91,7 @@ def add_ieee_authors_table(doc, authors: list, font_name: str):
             if author.get("email"):
                 add_cell_para(author["email"], size=10)
 
-        doc.add_paragraph()  # spacer after each row
+        doc.add_paragraph()
 
 
 def generate_docx(paper_data: dict, output_path: str) -> str:
@@ -109,6 +103,7 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
     fonts = template["fonts"]
     spacing = template["spacing"]
     numbering = template["numbering"]
+    is_ieee = template_id in ["ieee-conference", "ieee-journal"]
 
     # Page margins
     section = doc.sections[0]
@@ -126,26 +121,22 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
     abstract_body_font = fonts["abstract_body"]
     keyword_font = fonts["keywords"]
 
-    # Title
+    # ── FULL WIDTH: Title ─────────────────────────────────────
     title_para = doc.add_paragraph()
     title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title_para.paragraph_format.space_after = Pt(12)
     add_run_with_font(
         title_para,
         paper_data.get("title", "Untitled Paper"),
-        title_font["name"],
-        title_font["size_pt"],
+        title_font["name"], title_font["size_pt"],
         bold=title_font.get("bold", True),
     )
 
-    # Authors — IEEE 3-column grid
+    # ── FULL WIDTH: Authors ───────────────────────────────────
     authors = paper_data.get("authors", [])
-    is_ieee = template_id in ["ieee-conference", "ieee-journal"]
-
     if is_ieee and authors:
         add_ieee_authors_table(doc, authors, fonts["authors"]["name"])
     else:
-        # Single column author list for Springer/Elsevier/ACM
         author_names = ", ".join([a.get("name", "") for a in authors if a.get("name")])
         if author_names:
             ap = doc.add_paragraph()
@@ -170,32 +161,8 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
                 ep.paragraph_format.space_after = Pt(2)
                 add_run_with_font(ep, author["email"], fonts["authors"]["name"], 10)
 
-    # Abstract
-    abstract_text = strip_html(paper_data.get("sections", {}).get("abstract", ""))
-    if abstract_text:
-        abs_para = doc.add_paragraph()
-        abs_para.paragraph_format.space_after = Pt(4)
-        add_run_with_font(abs_para, "Abstract\u2014",
-                          abstract_heading_font["name"],
-                          abstract_heading_font.get("size_pt", 9),
-                          bold=abstract_heading_font.get("bold", True),
-                          italic=abstract_heading_font.get("italic", True))
-        add_run_with_font(abs_para, abstract_text,
-                          abstract_body_font["name"],
-                          abstract_body_font.get("size_pt", 9))
-
-    # Keywords
-    keywords = paper_data.get("keywords", [])
-    if keywords:
-        kw_para = doc.add_paragraph()
-        kw_para.paragraph_format.space_after = Pt(8)
-        add_run_with_font(kw_para, "Keywords\u2014",
-                          keyword_font["name"], keyword_font.get("size_pt", 9),
-                          bold=True, italic=True)
-        add_run_with_font(kw_para, ", ".join(keywords),
-                          keyword_font["name"], keyword_font.get("size_pt", 9))
-
-    # Two-column section break for IEEE/ACM
+    # ── TWO COLUMN SECTION BREAK ──────────────────────────────
+    # Abstract, keywords, and all body sections go inside two columns
     if template["columns"] == 2:
         new_section = doc.add_section(WD_SECTION.CONTINUOUS)
         set_two_columns(new_section)
@@ -204,7 +171,31 @@ def generate_docx(paper_data: dict, output_path: str) -> str:
         new_section.left_margin = Inches(page_cfg["margin_left_inches"])
         new_section.right_margin = Inches(page_cfg["margin_right_inches"])
 
-    # Body sections
+    # ── Abstract (inside two columns) ────────────────────────
+    abstract_text = strip_html(paper_data.get("sections", {}).get("abstract", ""))
+    if abstract_text:
+        abs_para = doc.add_paragraph()
+        abs_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        abs_para.paragraph_format.space_after = Pt(4)
+        add_run_with_font(abs_para, "Abstract\u2014",
+                          abstract_heading_font["name"],
+                          abstract_heading_font.get("size_pt", 9),
+                          bold=True, italic=True)
+        add_run_with_font(abs_para, " " + abstract_text,
+                          abstract_body_font["name"],
+                          abstract_body_font.get("size_pt", 9),
+                          bold=True)
+
+    # ── Keywords (inside two columns) ────────────────────────
+    keywords = paper_data.get("keywords", [])
+    if keywords:
+        kw_para = doc.add_paragraph()
+        kw_para.paragraph_format.space_after = Pt(8)
+        add_run_with_font(kw_para, "Keywords\u2014 " + ", ".join(keywords),
+                          keyword_font["name"], keyword_font.get("size_pt", 9),
+                          bold=True, italic=True)
+
+    # ── Body sections ─────────────────────────────────────────
     section_order = [
         ("introduction", "Introduction"),
         ("literatureReview", "Literature Review"),
