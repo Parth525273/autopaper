@@ -10,7 +10,8 @@ import SectionEditor from "@/components/editor/SectionEditor";
 import AuthorForm from "@/components/editor/AuthorForm";
 import KeywordsInput from "@/components/editor/KeywordsInput";
 import PaperPreview from "@/components/preview/PaperPreview";
-import { FileText, Eye, EyeOff, ChevronLeft, Save } from "lucide-react";
+import { downloadDocx } from "@/lib/generate";
+import { FileText, Eye, EyeOff, ChevronLeft, Save, Loader2 } from "lucide-react";
 
 interface EditorPageProps {
   params: Promise<{ templateId: string }>;
@@ -23,6 +24,8 @@ export default function EditorPage({ params }: EditorPageProps) {
   const [activeSection, setActiveSection] = useState("title");
   const [showPreview, setShowPreview] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState("");
 
   const template = TEMPLATE_MAP[templateId];
 
@@ -39,6 +42,24 @@ export default function EditorPage({ params }: EditorPageProps) {
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleGenerate = async () => {
+    if (!paper.title) {
+      setGenerateError("Please add a paper title before generating.");
+      setTimeout(() => setGenerateError(""), 3000);
+      return;
+    }
+    setGenerating(true);
+    setGenerateError("");
+    try {
+      await downloadDocx(paper);
+    } catch (err: any) {
+      setGenerateError(err.message || "Generation failed. Is the backend running?");
+      setTimeout(() => setGenerateError(""), 4000);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const renderActiveSection = () => {
@@ -117,6 +138,11 @@ export default function EditorPage({ params }: EditorPageProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {generateError && (
+            <span className="text-xs text-red-500 bg-red-50 px-3 py-1 rounded-lg border border-red-200">
+              {generateError}
+            </span>
+          )}
           <button
             onClick={() => setShowPreview(!showPreview)}
             className="flex items-center gap-2 text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
@@ -131,9 +157,13 @@ export default function EditorPage({ params }: EditorPageProps) {
             <Save size={14} />
             {saved ? "Saved!" : "Save"}
           </button>
-          <button className="flex items-center gap-2 text-sm px-3 py-1.5 bg-slate-900 dark:bg-white hover:bg-slate-700 dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-lg transition-colors">
-            <FileText size={14} />
-            Generate
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="flex items-center gap-2 text-sm px-3 py-1.5 bg-slate-900 dark:bg-white hover:bg-slate-700 dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-lg transition-colors disabled:opacity-60"
+          >
+            {generating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+            {generating ? "Generating..." : "Generate DOCX"}
           </button>
         </div>
       </div>
