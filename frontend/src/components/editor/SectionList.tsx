@@ -11,13 +11,7 @@ interface SectionListProps {
   onSelect: (key: string) => void;
 }
 
-const SPECIAL_SECTIONS = ["title", "authors", "keywords"];
-
-export default function SectionList({
-  activeSection,
-  completedSections,
-  onSelect,
-}: SectionListProps) {
+export default function SectionList({ activeSection, completedSections, onSelect }: SectionListProps) {
   const allSections = [
     { key: "title", label: "Title" },
     { key: "authors", label: "Authors" },
@@ -33,7 +27,7 @@ export default function SectionList({
       {allSections.map((section, index) => {
         const isActive = activeSection === section.key;
         const isCompleted = completedSections.includes(section.key as SectionKey);
-        const isSpecial = SPECIAL_SECTIONS.includes(section.key);
+        const isSpecial = ["title", "authors", "keywords"].includes(section.key);
 
         return (
           <button
@@ -47,11 +41,10 @@ export default function SectionList({
             )}
           >
             <span className="flex-shrink-0">
-              {isCompleted ? (
-                <CheckCircle2 size={14} className="text-green-500" />
-              ) : (
-                <Circle size={14} className="text-slate-300 dark:text-slate-600" />
-              )}
+              {isCompleted
+                ? <CheckCircle2 size={14} className="text-green-500" />
+                : <Circle size={14} className="text-slate-300 dark:text-slate-600" />
+              }
             </span>
             <span className="flex-1">{section.label}</span>
             {!isSpecial && (

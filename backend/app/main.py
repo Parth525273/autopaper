@@ -6,7 +6,6 @@ import os
 from app.config import settings
 from app.api.v1.router import api_router
 
-# ─── App ─────────────────────────────────────────────────────
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -15,16 +14,16 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ─── CORS ────────────────────────────────────────────────────
+# ─── CORS — allow all origins in development ─────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# ─── Static files (generated docs) ───────────────────────────
+# ─── Static files ─────────────────────────────────────────────
 os.makedirs(settings.GENERATED_DIR, exist_ok=True)
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
@@ -34,18 +33,16 @@ app.mount(
     name="generated",
 )
 
-# ─── Routers ─────────────────────────────────────────────────
+# ─── Routers ──────────────────────────────────────────────────
 app.include_router(api_router, prefix="/api/v1")
 
 
-# ─── Health check ────────────────────────────────────────────
 @app.get("/health", tags=["health"])
 def health_check():
     return {
         "status": "ok",
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "environment": settings.ENVIRONMENT,
     }
 
 
